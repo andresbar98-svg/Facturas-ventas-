@@ -68,6 +68,7 @@ input:focus,.btn:focus-visible,.link:focus-visible{outline:3px solid var(--blue)
 #qr{width:100%;height:100%}#qr canvas,#qr img{width:100%!important;height:100%!important}
 #publico{padding:0 0 16px}
 .item .resumen{display:none;align-items:center;gap:8px}
+.abrow .resumen{display:none;align-items:center;gap:8px}.abrow.plegado .editor{display:none}.abrow.plegado .resumen{display:flex}
 .item.plegado .editor{display:none}.item.plegado .resumen{display:flex}
 .resumen .rs-t{flex:1;min-width:0}
 .resumen .rs-t b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -394,10 +395,9 @@ function toast(msg, tipo = "ok") {
 function vista(id) { VISTAS.forEach(v => $("#" + v).classList.toggle("hidden", v !== id)); window.scrollTo(0, 0); }
 function cerrarDetalle() { unsubVenta?.(); unsubAbonos?.(); ventaActual = null; abonosActual = []; }
 
-$("#negocio").textContent = NEGOCIO.nombre + (MODO_LOCAL ? " (prueba)" : "");
+$("#negocio").textContent = NEGOCIO.nombre;
 if (MODO_LOCAL) {
   $("#btnSalir").classList.add("hidden");
-  $("#vInicio").insertAdjacentHTML("afterbegin", '<p class="rc-sub">Modo de prueba: las ventas se guardan solo en este navegador.</p>');
 }
 API.onAuth(u => {
   $("#cargando")?.remove();
@@ -482,18 +482,45 @@ function leerAbonos() {
 function addAbonoRow() {
   const d = document.createElement("div");
   d.className = "abrow";
-  d.innerHTML = `<div class="fila">
+  d.innerHTML = `<div class="editor">
+    <div class="fila">
       <label class="mini"><span>Monto</span><input class="am money-in" type="text" inputmode="decimal" placeholder="Ej. 300.000"></label>
       <label class="mini"><span>Fecha</span><input class="af" type="date" max="${hoyISO()}" value="${hoyISO()}"></label>
     </div>
     <label class="mini" style="margin-top:8px!important"><span>Forma de pago</span><select class="amet"><option>Efectivo</option><option>Transferencia</option></select></label>
-    <button class="btn sec quitar" type="button" style="min-height:44px;margin-top:8px">Quitar este abono</button>`;
+    <button class="btn okab" type="button" style="min-height:48px;margin-top:10px">Guardar abono</button>
+    <button class="btn sec quitar" type="button" style="min-height:44px;margin-top:8px">Quitar este abono</button>
+  </div><div class="resumen"></div>`;
   $("#abonosForm").appendChild(d);
   d.querySelector(".am").focus();
 }
-$("#btnAbonoForm").onclick = () => { addAbonoRow(); pintarTotal(); };
+function plegarAb(r) {
+  const monto = round2(num(r.querySelector(".am").value)), f = r.querySelector(".af").value;
+  if (!(monto > 0)) { toast("Escribe el monto del abono", "err"); return false; }
+  if (!f) { toast("Indica la fecha del abono", "err"); return false; }
+  r.querySelector(".resumen").innerHTML = `<div class="rs-t"><b>${money(monto)}</b><small>${fmtFecha(fechaInput(f))} - ${esc(r.querySelector(".amet").value)}</small></div>
+    <button class="icono lapiz" type="button" aria-label="Editar abono">${ICO_LAPIZ}</button>
+    <button class="icono basura" type="button" aria-label="Eliminar abono">${ICO_BASURA}</button>`;
+  r.classList.add("plegado");
+  return true;
+}
+function desplegarAb(r) {
+  document.querySelectorAll(".abrow:not(.plegado)").forEach(o => { if (o !== r) plegarAb(o); });
+  r.classList.remove("plegado"); r.querySelector(".am").focus();
+}
+$("#btnAbonoForm").onclick = () => {
+  const abierto = document.querySelector(".abrow:not(.plegado)");
+  if (abierto && !plegarAb(abierto)) return;
+  addAbonoRow(); pintarTotal();
+};
 $("#abonosForm").oninput = pintarTotal;
-$("#abonosForm").onclick = e => { const q = e.target.closest(".quitar"); if (q) { q.closest(".abrow").remove(); pintarTotal(); } };
+$("#abonosForm").onclick = e => {
+  const r = e.target.closest(".abrow");
+  if (!r) return;
+  if (e.target.closest(".okab")) { plegarAb(r); return; }
+  if (e.target.closest(".lapiz")) return desplegarAb(r);
+  if (e.target.closest(".basura") || e.target.closest(".quitar")) { r.remove(); pintarTotal(); }
+};
 function cantidadFila(r) { const lb = +r.querySelector(".l").value; return lb > 0 ? lb : (+r.querySelector(".c").value || 0); }
 function totalForm() {
   return round2([...document.querySelectorAll(".item")].reduce((t, r) => t + cantidadFila(r) * num(r.querySelector(".p").value), 0));
